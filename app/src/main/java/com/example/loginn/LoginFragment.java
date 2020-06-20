@@ -1,5 +1,6 @@
 package com.example.loginn;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -14,6 +15,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
@@ -25,11 +27,20 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
+import com.google.android.material.snackbar.BaseTransientBottomBar;
+import com.google.android.material.snackbar.Snackbar;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
+import com.google.firebase.auth.SignInMethodQueryResult;
+import com.pd.chocobar.ChocoBar;
+
+import java.util.Arrays;
+import java.util.List;
+
+import static android.widget.Toast.LENGTH_SHORT;
 
 
 /**
@@ -57,7 +68,7 @@ public class LoginFragment extends Fragment {
     private GoogleSignInClient mGoogleSignInClient;
 
     private FirebaseAuth mAuth;
-
+    private FirebaseUser user;
     private OnFragmentInteractionListener mListener;
 
     public LoginFragment() {
@@ -95,7 +106,7 @@ public class LoginFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
-        View v = inflater.inflate(R.layout.fragment_login, container, false);
+        final View v = inflater.inflate(R.layout.fragment_login, container, false);
 
         // Initialize Firebase Auth
         mAuth = FirebaseAuth.getInstance();
@@ -125,36 +136,58 @@ public class LoginFragment extends Fragment {
 
         button1L.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View v) {
-               logIn();
+            public void onClick(final View v) {
+               if(editText1L.getText().toString().equals("") && editText2L.getText().toString().equals("")){
+                   //User didn't provide anything, notify them
+                   Toast.makeText(getContext(), "Please provide credentials", LENGTH_SHORT).show();
+               }else{
+                   mAuth.fetchSignInMethodsForEmail(editText1L.getText().toString()).addOnCompleteListener(new OnCompleteListener<SignInMethodQueryResult>() {
+                       @Override
+                       public void onComplete(@NonNull Task<SignInMethodQueryResult> task) {
+                            if (task.getResult().getSignInMethods().isEmpty()){
+                                Log.i("Check for email use", "not used at all");
+                                hideKeyboard(getActivity());
+                                ChocoBar.builder().setActivity(getActivity()).setActionText("Create an account")
+                                        .setActionClickListener(new View.OnClickListener() {
+                                            @Override
+                                            public void onClick(View v) {
+                                                register();
+                                            }
+                                        })
+                                        .setText("Provided email is not linked to any existing account")
+                                        .setDuration(ChocoBar.LENGTH_LONG)
+                                        .build()
+                                        .show();
+                            }else{
+                                if (task.getResult().getSignInMethods().get(0).equals("password")){
+                                    logIn();
+                                    Log.i("Check for email use", "used for email and password authentication");
+                                }else{
+                                    Log.i("Check for email use", "used for other auth methods");
+                                    hideKeyboard(getActivity());
+                                    ChocoBar.builder().setActivity(getActivity()).setActionText("Create an account")
+                                            .setActionClickListener(new View.OnClickListener() {
+                                                @Override
+                                                public void onClick(View v) {
+                                                    register();
+                                                }
+                                            })
+                                            .setText("Provided email is linked to a different authentication method")
+                                            .setDuration(ChocoBar.LENGTH_LONG)
+                                            .build()
+                                            .show();
+                                }
+                            }
+                       }
+                   });
+               }
             }
         });
 
         button2L.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mAuth.createUserWithEmailAndPassword(editText1L.getText().toString(), editText2L.getText().toString())
-                        .addOnCompleteListener(getActivity(), new OnCompleteListener<AuthResult>() {
-                            @Override
-                            public void onComplete(@NonNull Task<AuthResult> task) {
-                                if (task.isSuccessful()) {
-                                    // Sign in success, update UI with the signed-in user's information
-                                    Log.d("SIGN UP", "createUserWithEmail:success");
-                                    FirebaseUser user = mAuth.getCurrentUser();
-                                    FragmentManager manager = getFragmentManager();
-                                    FragmentTransaction transaction = manager.beginTransaction();
-                                    transaction.add(R.id.frameLayout, new HomeFragment()).replace(R.id.frameLayout, new HomeFragment()).addToBackStack(null).commit();
-                                } else {
-                                    // If sign in fails, display a message to the user.
-                                    Log.w("SIGN UP", "createUserWithEmail:failure", task.getException());
-                                    Toast.makeText(getContext(), "Authentication failed.",
-                                            Toast.LENGTH_SHORT).show();
-
-                                }
-
-                                // ...
-                            }
-                        });
+                register();
             }
         });
 
@@ -168,9 +201,25 @@ public class LoginFragment extends Fragment {
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser != null){
             Log.i("onStart",  "someone is logged in "+currentUser.getEmail());
-            FragmentManager manager = getFragmentManager();
-            FragmentTransaction transaction = manager.beginTransaction();
-            transaction.add(R.id.frameLayout, new HomeFragment()).replace(R.id.frameLayout, new HomeFragment()).addToBackStack(null).commit();
+            if (currentUser.isEmailVerified()){
+//                FragmentManager manager = getFragmentManager();
+//                FragmentTransaction transaction = manager.beginTransaction();
+//                transaction.add(R.id.frameLayout, new HomeFragment()).replace(R.id.frameLayout, new HomeFragment()).addToBackStack(null).commit();
+                home();
+            }else{
+                hideKeyboard(getActivity());
+                ChocoBar.builder().setActivity(getActivity()).setActionText("Verify the email address")
+                        .setActionClickListener(new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+                                sendEmailVerification();
+                            }
+                        })
+                        .setText("This account's email address is not verified")
+                        .setDuration(ChocoBar.LENGTH_LONG)
+                        .build()
+                        .show();
+            }
         }
     }
 
@@ -182,21 +231,136 @@ public class LoginFragment extends Fragment {
                         if (task.isSuccessful()) {
                             // Sign in success, update UI with the signed-in user's information
                             Log.d("SIGN IN", "signInWithEmail:success");
-                            FirebaseUser user = mAuth.getCurrentUser();
-                            FragmentManager manager = getFragmentManager();
-                            FragmentTransaction transaction = manager.beginTransaction();
-                            transaction.add(R.id.frameLayout, new HomeFragment()).replace(R.id.frameLayout, new HomeFragment()).addToBackStack(null).commit();
+                            user = mAuth.getCurrentUser();
+                            if (IsEmailVerified()){
+//                                FragmentManager manager = getFragmentManager();
+//                                FragmentTransaction transaction = manager.beginTransaction();
+//                                transaction.add(R.id.frameLayout, new HomeFragment()).replace(R.id.frameLayout, new HomeFragment()).addToBackStack(null).commit();
+                                home();
+                            }else{
+                                hideKeyboard(getActivity());
+                                ChocoBar.builder().setActivity(getActivity()).setActionText("Send verification email")
+                                        .setActionClickListener(new View.OnClickListener() {
+                                            @Override
+                                            public void onClick(View v) {
+                                                sendEmailVerification();
+                                            }
+                                        })
+                                        .setText("This account's email address is not verified")
+                                        .setDuration(ChocoBar.LENGTH_LONG)
+                                        .build()
+                                        .show();
+                            }
                         } else {
                             // If sign in fails, display a message to the user.
                             Log.w("SIGN IN", "signInWithEmail:failure", task.getException());
-                            Toast.makeText(getContext(), "Authentication failed.",
-                                    Toast.LENGTH_SHORT).show();
+                            hideKeyboard(getActivity());
+                            ChocoBar.builder().setActivity(getActivity()).setActionText("Reset your password")
+                                    .setActionClickListener(new View.OnClickListener() {
+                                        @Override
+                                        public void onClick(View v) {
 
+                                            final String email = editText1L.getText().toString();
+
+                                            mAuth.sendPasswordResetEmail(email)
+                                                    .addOnCompleteListener(new OnCompleteListener<Void>() {
+                                                        @Override
+                                                        public void onComplete(@NonNull Task<Void> task) {
+                                                            if (task.isSuccessful()) {
+                                                                Log.d("Reset", "Email sent.");
+                                                                Toast.makeText(getContext(), "Email has been sent to " + email, LENGTH_SHORT).show();
+                                                            }
+                                                        }
+                                                    });
+                                        }
+                                    })
+                                    .setText("Provided password is incorrect")
+                                    .setDuration(ChocoBar.LENGTH_LONG)
+                                    .build()
+                                    .show();
+                        }
+
+
+                    }
+                });
+    }
+
+    public static void hideKeyboard(Activity activity) {
+        InputMethodManager imm = (InputMethodManager) activity.getSystemService(Activity.INPUT_METHOD_SERVICE);
+        //Find the currently focused view, so we can grab the correct window token from it.
+        View view = activity.getCurrentFocus();
+        //If no view currently has focus, create a new one, just so we can grab a window token from it
+        if (view == null) {
+            view = new View(activity);
+        }
+        imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+    }
+
+    private void register(){
+        mAuth.createUserWithEmailAndPassword(editText1L.getText().toString(), editText2L.getText().toString())
+                .addOnCompleteListener(getActivity(), new OnCompleteListener<AuthResult>() {
+                    @Override
+                    public void onComplete(@NonNull Task<AuthResult> task) {
+                        if (task.isSuccessful()) {
+                            // Sign in success, update UI with the signed-in user's information
+                            Log.d("SIGN UP", "createUserWithEmail:success");
+                            user = mAuth.getCurrentUser();
+                            sendEmailVerification();
+                        } else {
+                            // If sign in fails, display a message to the user.
+                            Log.w("SIGN UP", "createUserWithEmail:failure", task.getException());
+                            Toast.makeText(getContext(), "Register failed.",
+                                    LENGTH_SHORT).show();
                         }
 
                         // ...
                     }
                 });
+    }
+
+    private void home(){
+        Intent intent = new Intent(getContext(), Main2Activity.class);
+        startActivity(intent);
+    }
+
+    private void sendEmailVerification() {
+
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+
+        if (user != null){
+            user.sendEmailVerification()
+                    .addOnCompleteListener(new OnCompleteListener<Void>() {
+                        @Override
+                        public void onComplete(@NonNull Task<Void> task) {
+                            if (task.isSuccessful()) {
+                                Log.d("email verification", "Email verification sent.");
+                                mAuth.signOut();
+                                hideKeyboard(getActivity());
+                                ChocoBar.builder().setActivity(getActivity())
+                                        .setText("We've sent a verification link to this email address. Please sign in when you verified your email.")
+                                        .setDuration(ChocoBar.LENGTH_LONG)
+                                        .build()
+                                        .show();
+                            }
+                        }
+                    });
+        }
+    }
+
+    private boolean IsEmailVerified() {
+
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+
+        if (user != null){
+            if (user.isEmailVerified()) {
+                Log.d("email verification", "Email is verified.");
+                return true;
+            } else {
+                Log.d("email verification", "Email is not verified !.");
+            }
+        }
+
+        return false;
     }
 
     private void signIn() {

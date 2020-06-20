@@ -4,5 +4,7 @@
     <!-- TODO: Remove or change this placeholder text -->
     <string name="hello_blank_fragment">Hello blank fragment</string>
 
-    <string name="google_maps_key" templateMergeStrategy="preserve" translatable="false">AIzaSyAhmmO-vSDK_i4FuvuMcPFiN0MA42N_sJo</string>
+    <string name="title_activity_maps">Map</string>
+    <string name="Name">Locamap</string>
+    <string name="title_activity_main2">Main2Activity</string>
 </resources>
